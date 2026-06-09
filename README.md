@@ -1,2 +1,2 @@
 # secure-file-delivery
-A production-grade ASP.NET Core 8 service for secure PDF statement storage and time-limited, single-use download link generation, built with Clean Architecture.
+Secure File Statement Delivery is a production-grade REST API built with ASP.NET Core 8 that allows financial statements (PDF files) to be securely uploaded, stored, and delivered to customers via time-limited, single-use download tokens. Built following Clean Architecture principles, it features JWT authentication, MinIO-backed file storage, PostgreSQL persistence, OpenTelemetry observability, and a fully containerised Docker setup.
