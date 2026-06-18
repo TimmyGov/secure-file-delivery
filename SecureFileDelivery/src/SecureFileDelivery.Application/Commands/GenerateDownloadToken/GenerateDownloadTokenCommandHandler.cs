@@ -17,6 +17,7 @@ public sealed class GenerateDownloadTokenCommandHandler : IRequestHandler<Genera
     private readonly ITokenGenerator _tokenGenerator;
     private readonly ITokenHasher _tokenHasher;
     private readonly IDateTimeProvider _dateTimeProvider;
+    private readonly IUnitOfWork _unitOfWork;
 
     public GenerateDownloadTokenCommandHandler(
         IStatementRepository statementRepository,
@@ -24,7 +25,8 @@ public sealed class GenerateDownloadTokenCommandHandler : IRequestHandler<Genera
         IAuditLogRepository auditLogRepository,
         ITokenGenerator tokenGenerator,
         ITokenHasher tokenHasher,
-        IDateTimeProvider dateTimeProvider)
+        IDateTimeProvider dateTimeProvider,
+        IUnitOfWork unitOfWork)
     {
         _statementRepository = statementRepository;
         _downloadTokenRepository = downloadTokenRepository;
@@ -32,6 +34,7 @@ public sealed class GenerateDownloadTokenCommandHandler : IRequestHandler<Genera
         _tokenGenerator = tokenGenerator;
         _tokenHasher = tokenHasher;
         _dateTimeProvider = dateTimeProvider;
+        _unitOfWork = unitOfWork;
     }
 
     public async Task<DownloadTokenDto> Handle(GenerateDownloadTokenCommand request, CancellationToken cancellationToken)
@@ -51,16 +54,19 @@ public sealed class GenerateDownloadTokenCommandHandler : IRequestHandler<Genera
             _dateTimeProvider.UtcNow,
             request.IsMultiUse);
 
-        await _downloadTokenRepository.AddAsync(token);
-        await _auditLogRepository.AddAsync(new AuditLog(
-            Guid.NewGuid(),
-            new StatementId(request.StatementId),
-            new TokenId(token.Id),
-            AuditAction.TokenGenerated,
-            _dateTimeProvider.UtcNow,
-            request.RequestedBy,
-            "n/a",
-            $"Download token generated with TTL of {request.TtlMinutes} minutes."));
+        await _unitOfWork.ExecuteInTransactionAsync(async _ =>
+        {
+            await _downloadTokenRepository.AddAsync(token);
+            await _auditLogRepository.AddAsync(new AuditLog(
+                Guid.NewGuid(),
+                new StatementId(request.StatementId),
+                new TokenId(token.Id),
+                AuditAction.TokenGenerated,
+                _dateTimeProvider.UtcNow,
+                request.RequestedBy,
+                "n/a",
+                $"Download token generated with TTL of {request.TtlMinutes} minutes."));
+        });
 
         return token.ToDto(rawToken);
     }

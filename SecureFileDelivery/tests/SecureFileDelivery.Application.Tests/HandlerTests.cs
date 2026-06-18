@@ -15,14 +15,30 @@ public sealed class HandlerTests
 {
     private readonly DateTime _now = new(2025, 1, 1, 12, 0, 0, DateTimeKind.Utc);
 
+    private sealed class TestUnitOfWork : IUnitOfWork
+    {
+        public async Task ExecuteInTransactionAsync(Func<CancellationToken, Task> operation, CancellationToken cancellationToken = default)
+        {
+            await operation(cancellationToken);
+        }
+
+        public async Task<T> ExecuteInTransactionAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken cancellationToken = default)
+        {
+            return await operation(cancellationToken);
+        }
+    }
+
+    private static IUnitOfWork CreateUnitOfWork() => new TestUnitOfWork();
+
     [Fact]
     public async Task UploadStatementHandler_ShouldUploadStatement()
     {
         var statementRepository = new Mock<IStatementRepository>();
         var auditRepository = new Mock<IAuditLogRepository>();
         var storage = new Mock<IFileStorage>();
+        var unitOfWork = CreateUnitOfWork();
         storage.Setup(x => x.UploadAsync(It.IsAny<Stream>(), "statement.pdf", "application/pdf")).ReturnsAsync("stored.pdf");
-        var handler = new UploadStatementCommandHandler(statementRepository.Object, auditRepository.Object, storage.Object, new TestDateTimeProvider(_now));
+        var handler = new UploadStatementCommandHandler(statementRepository.Object, auditRepository.Object, storage.Object, new TestDateTimeProvider(_now), unitOfWork);
 
         var result = await handler.Handle(new UploadStatementCommand(Guid.NewGuid(), "statement.pdf", new MemoryStream(new byte[] { 1, 2, 3 }), "application/pdf", 3), CancellationToken.None);
 
@@ -39,7 +55,8 @@ public sealed class HandlerTests
             Mock.Of<IStatementRepository>(),
             Mock.Of<IAuditLogRepository>(),
             Mock.Of<IFileStorage>(),
-            new TestDateTimeProvider(_now));
+            new TestDateTimeProvider(_now),
+            CreateUnitOfWork());
 
         var action = () => handler.Handle(new UploadStatementCommand(Guid.NewGuid(), "statement.txt", new MemoryStream([1]), "text/plain", 1), CancellationToken.None);
 
@@ -54,12 +71,13 @@ public sealed class HandlerTests
         var auditRepository = new Mock<IAuditLogRepository>();
         var tokenGenerator = new Mock<ITokenGenerator>();
         var tokenHasher = new Mock<ITokenHasher>();
+        var unitOfWork = CreateUnitOfWork();
         var statementId = Guid.NewGuid();
         statementRepository.Setup(x => x.GetByIdAsync(new StatementId(statementId)))
             .ReturnsAsync(new Statement(statementId, new CustomerId(Guid.NewGuid()), "statement.pdf", "path", 10, "application/pdf", _now));
         tokenGenerator.Setup(x => x.Generate()).Returns("raw-token");
         tokenHasher.Setup(x => x.Hash("raw-token")).Returns("hashed-token");
-        var handler = new GenerateDownloadTokenCommandHandler(statementRepository.Object, tokenRepository.Object, auditRepository.Object, tokenGenerator.Object, tokenHasher.Object, new TestDateTimeProvider(_now));
+        var handler = new GenerateDownloadTokenCommandHandler(statementRepository.Object, tokenRepository.Object, auditRepository.Object, tokenGenerator.Object, tokenHasher.Object, new TestDateTimeProvider(_now), unitOfWork);
 
         var result = await handler.Handle(new GenerateDownloadTokenCommand(statementId, "tester", 60, false), CancellationToken.None);
 
@@ -73,7 +91,7 @@ public sealed class HandlerTests
     {
         var statementRepository = new Mock<IStatementRepository>();
         statementRepository.Setup(x => x.GetByIdAsync(It.IsAny<StatementId>())).ReturnsAsync((Statement?)null);
-        var handler = new GenerateDownloadTokenCommandHandler(statementRepository.Object, Mock.Of<IDownloadTokenRepository>(), Mock.Of<IAuditLogRepository>(), Mock.Of<ITokenGenerator>(), Mock.Of<ITokenHasher>(), new TestDateTimeProvider(_now));
+        var handler = new GenerateDownloadTokenCommandHandler(statementRepository.Object, Mock.Of<IDownloadTokenRepository>(), Mock.Of<IAuditLogRepository>(), Mock.Of<ITokenGenerator>(), Mock.Of<ITokenHasher>(), new TestDateTimeProvider(_now), Mock.Of<IUnitOfWork>());
 
         var action = () => handler.Handle(new GenerateDownloadTokenCommand(Guid.NewGuid(), "tester"), CancellationToken.None);
 
@@ -135,6 +153,8 @@ public sealed class HandlerTests
         var token = new DownloadToken(Guid.NewGuid(), new StatementId(Guid.NewGuid()), "hash", DateTime.UtcNow.AddMinutes(5), _now, false);
         var tokenRepository = new Mock<IDownloadTokenRepository>();
         tokenRepository.Setup(x => x.GetByTokenHashAsync("hash")).ReturnsAsync(token);
+        tokenRepository.Setup(x => x.GetByIdAsync(It.IsAny<TokenId>())).ReturnsAsync(token);
+        tokenRepository.Setup(x => x.TryMarkAsUsedAsync(It.IsAny<TokenId>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
         var statementRepository = new Mock<IStatementRepository>();
         statementRepository.Setup(x => x.GetByIdAsync(token.StatementId)).ReturnsAsync(new Statement(token.StatementId.Value, new CustomerId(Guid.NewGuid()), "statement.pdf", "path", 10, "application/pdf", _now));
         var fileStorage = new Mock<IFileStorage>();
@@ -146,8 +166,7 @@ public sealed class HandlerTests
         var result = await handler.Handle(new RedeemDownloadTokenQuery("raw", "127.0.0.1", "tester"), CancellationToken.None);
 
         result.FileName.Should().Be("statement.pdf");
-        token.UsedAt.Should().NotBeNull();
-        tokenRepository.Verify(x => x.UpdateAsync(token), Times.Once);
+        tokenRepository.Verify(x => x.TryMarkAsUsedAsync(It.IsAny<TokenId>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -202,17 +221,23 @@ public sealed class HandlerTests
     {
         var tokenRepositoryMock = tokenRepository is null ? new Mock<IDownloadTokenRepository>() : Mock.Get(tokenRepository);
         var tokenHasherMock = tokenHasher is null ? new Mock<ITokenHasher>() : Mock.Get(tokenHasher);
-        var statementRepository = Mock.Of<IStatementRepository>();
+        var statementRepository = new Mock<IStatementRepository>();
         var auditRepository = Mock.Of<IAuditLogRepository>();
         var fileStorage = Mock.Of<IFileStorage>();
 
         if (token is not null)
         {
             tokenRepositoryMock.Setup(x => x.GetByTokenHashAsync("hash")).ReturnsAsync(token);
+            tokenRepositoryMock.Setup(x => x.GetByIdAsync(It.IsAny<TokenId>())).ReturnsAsync(token);
+            tokenRepositoryMock.Setup(x => x.TryMarkAsUsedAsync(It.IsAny<TokenId>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(!token.IsRevoked && token.UsedAt is null);
+
+            statementRepository.Setup(x => x.GetByIdAsync(token.StatementId))
+                .ReturnsAsync(new Statement(token.StatementId.Value, new CustomerId(Guid.NewGuid()), "statement.pdf", "path", 10, "application/pdf", _now));
         }
 
         tokenHasherMock.Setup(x => x.Hash("raw")).Returns("hash");
 
-        return new RedeemDownloadTokenQueryHandler(tokenRepositoryMock.Object, statementRepository, auditRepository, tokenHasherMock.Object, fileStorage, new TestDateTimeProvider(_now));
+        return new RedeemDownloadTokenQueryHandler(tokenRepositoryMock.Object, statementRepository.Object, auditRepository, tokenHasherMock.Object, fileStorage, new TestDateTimeProvider(_now));
     }
 }

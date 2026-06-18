@@ -11,16 +11,16 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__DefaultConnection: Host=postgres;Database=securedelivery;Username=postgres;******
-      Jwt__Issuer: SecureFileDelivery
-      Jwt__Audience: SecureFileDelivery
-      Jwt__SecretKey: change-me-in-production-min-32-chars!!
+      ConnectionStrings__DefaultConnection: Host=postgres;Database=securedelivery;Username=postgres;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      Jwt__Issuer: ${JWT_ISSUER:?set JWT_ISSUER}
+      Jwt__Audience: ${JWT_AUDIENCE:?set JWT_AUDIENCE}
+      Jwt__SecretKey: ${JWT_SECRET_KEY:?set JWT_SECRET_KEY}
       Storage__Provider: Minio
-      Storage__Minio__Endpoint: minio:9000
-      Storage__Minio__AccessKey: minioadmin
-      Storage__Minio__SecretKey: minioadmin
-      Storage__Minio__BucketName: statements
-      Storage__Minio__UseSSL: "false"
+      Storage__Minio__Endpoint: ${MINIO_ENDPOINT:?set MINIO_ENDPOINT}
+      Storage__Minio__AccessKey: ${MINIO_ACCESS_KEY:?set MINIO_ACCESS_KEY}
+      Storage__Minio__SecretKey: ${MINIO_SECRET_KEY:?set MINIO_SECRET_KEY}
+      Storage__Minio__BucketName: ${MINIO_BUCKET_NAME:?set MINIO_BUCKET_NAME}
+      Storage__Minio__UseSSL: ${MINIO_USE_SSL:-false}
     ports:
       - "8080:8080"
 
@@ -29,7 +29,7 @@ services:
     environment:
       POSTGRES_DB: securedelivery
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d securedelivery"]
       interval: 10s
@@ -39,11 +39,11 @@ services:
       - postgres-data:/var/lib/postgresql/data
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?set MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?set MINIO_SECRET_KEY}
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
       interval: 10s

@@ -47,20 +47,30 @@ public sealed class RedeemDownloadTokenQueryHandler : IRequestHandler<RedeemDown
             throw new TokenExpiredException();
         }
 
-        if (!token.IsRedeemable())
-        {
-            if (token.IsRevoked)
-            {
-                throw new TokenRevokedException();
-            }
-
-            throw new TokenAlreadyUsedException();
-        }
-
         if (!token.IsMultiUse)
         {
-            token.MarkAsUsed();
-            await _downloadTokenRepository.UpdateAsync(token);
+            var usedAt = _dateTimeProvider.UtcNow;
+            var markedAsUsed = await _downloadTokenRepository.TryMarkAsUsedAsync(new TokenId(token.Id), usedAt, cancellationToken);
+            if (!markedAsUsed)
+            {
+                var currentToken = await _downloadTokenRepository.GetByIdAsync(new TokenId(token.Id));
+                if (currentToken is null)
+                {
+                    throw new TokenNotFoundException();
+                }
+
+                if (currentToken.IsExpired())
+                {
+                    throw new TokenExpiredException();
+                }
+
+                if (currentToken.IsRevoked)
+                {
+                    throw new TokenRevokedException();
+                }
+
+                throw new TokenAlreadyUsedException();
+            }
         }
 
         var statement = await _statementRepository.GetByIdAsync(token.StatementId);

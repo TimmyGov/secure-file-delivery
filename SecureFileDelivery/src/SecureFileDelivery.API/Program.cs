@@ -58,6 +58,8 @@ var jwtSection = builder.Configuration.GetSection("Jwt");
 var secretKey = jwtSection["SecretKey"] ?? throw new InvalidOperationException("JWT secret key is missing.");
 var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
 
+ValidateProductionConfiguration(builder.Configuration, builder.Environment);
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -141,5 +143,50 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
 });
 
 app.Run();
+
+static void ValidateProductionConfiguration(IConfiguration configuration, IHostEnvironment environment)
+{
+    if (!environment.IsProduction())
+    {
+        return;
+    }
+
+    var issues = new List<string>();
+
+    ValidateRequiredValue(configuration["Jwt:Issuer"], "Jwt:Issuer", issues);
+    ValidateRequiredValue(configuration["Jwt:Audience"], "Jwt:Audience", issues);
+    ValidateRequiredSecret(configuration["Jwt:SecretKey"], "Jwt:SecretKey", issues);
+    ValidateRequiredValue(configuration.GetConnectionString("DefaultConnection"), "ConnectionStrings:DefaultConnection", issues);
+
+    var storageProvider = configuration["Storage:Provider"] ?? "Local";
+    if (string.Equals(storageProvider, "Minio", StringComparison.OrdinalIgnoreCase))
+    {
+        ValidateRequiredValue(configuration["Storage:Minio:Endpoint"], "Storage:Minio:Endpoint", issues);
+        ValidateRequiredValue(configuration["Storage:Minio:BucketName"], "Storage:Minio:BucketName", issues);
+        ValidateRequiredValue(configuration["Storage:Minio:AccessKey"], "Storage:Minio:AccessKey", issues);
+        ValidateRequiredSecret(configuration["Storage:Minio:SecretKey"], "Storage:Minio:SecretKey", issues);
+    }
+
+    if (issues.Count > 0)
+    {
+        throw new InvalidOperationException($"Production configuration is incomplete: {string.Join(", ", issues)}");
+    }
+}
+
+static void ValidateRequiredValue(string? value, string key, ICollection<string> issues)
+{
+    if (string.IsNullOrWhiteSpace(value) || value.Contains("******", StringComparison.Ordinal) || value.Contains("change-me", StringComparison.OrdinalIgnoreCase))
+    {
+        issues.Add(key);
+    }
+}
+
+static void ValidateRequiredSecret(string? value, string key, ICollection<string> issues)
+{
+    if (string.IsNullOrWhiteSpace(value) || value.Length < 32 || value.Contains("******", StringComparison.Ordinal) || value.Contains("change-me", StringComparison.OrdinalIgnoreCase))
+    {
+        issues.Add(key);
+    }
+}
 
 public partial class Program;

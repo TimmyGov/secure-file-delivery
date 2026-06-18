@@ -122,7 +122,7 @@ public sealed class ApiIntegrationTests : IClassFixture<CustomWebApplicationFact
 
     private static string CreateJwt()
     {
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("change-me-in-production-min-32-chars!!"));
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("development-only-secret-change-me-32!!"));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
         var token = new JwtSecurityToken(
             issuer: "SecureFileDelivery",

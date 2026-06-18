@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using SecureFileDelivery.Domain.Exceptions;
@@ -45,10 +46,12 @@ public sealed class GlobalExceptionHandlingMiddleware
         var problemDetails = new ProblemDetails
         {
             Title = title,
-            Detail = exception.Message,
+            Detail = status >= StatusCodes.Status500InternalServerError ? "An unexpected error occurred." : exception.Message,
             Status = status,
             Instance = context.Request.Path
         };
+
+        problemDetails.Extensions["traceId"] = Activity.Current?.Id ?? context.TraceIdentifier;
 
         if (exception is ValidationException validationException)
         {

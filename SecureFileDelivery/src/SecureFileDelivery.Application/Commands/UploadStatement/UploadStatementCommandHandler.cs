@@ -15,17 +15,20 @@ public sealed class UploadStatementCommandHandler : IRequestHandler<UploadStatem
     private readonly IAuditLogRepository _auditLogRepository;
     private readonly IFileStorage _fileStorage;
     private readonly IDateTimeProvider _dateTimeProvider;
+    private readonly IUnitOfWork _unitOfWork;
 
     public UploadStatementCommandHandler(
         IStatementRepository statementRepository,
         IAuditLogRepository auditLogRepository,
         IFileStorage fileStorage,
-        IDateTimeProvider dateTimeProvider)
+        IDateTimeProvider dateTimeProvider,
+        IUnitOfWork unitOfWork)
     {
         _statementRepository = statementRepository;
         _auditLogRepository = auditLogRepository;
         _fileStorage = fileStorage;
         _dateTimeProvider = dateTimeProvider;
+        _unitOfWork = unitOfWork;
     }
 
     public async Task<StatementDto> Handle(UploadStatementCommand request, CancellationToken cancellationToken)
@@ -45,16 +48,34 @@ public sealed class UploadStatementCommandHandler : IRequestHandler<UploadStatem
             request.ContentType,
             _dateTimeProvider.UtcNow);
 
-        await _statementRepository.AddAsync(statement);
-        await _auditLogRepository.AddAsync(new AuditLog(
-            Guid.NewGuid(),
-            new StatementId(statement.Id),
-            null,
-            AuditAction.Uploaded,
-            _dateTimeProvider.UtcNow,
-            "system",
-            "n/a",
-            $"Statement '{statement.FileName}' uploaded."));
+        try
+        {
+            await _unitOfWork.ExecuteInTransactionAsync(async _ =>
+            {
+                await _statementRepository.AddAsync(statement);
+                await _auditLogRepository.AddAsync(new AuditLog(
+                    Guid.NewGuid(),
+                    new StatementId(statement.Id),
+                    null,
+                    AuditAction.Uploaded,
+                    _dateTimeProvider.UtcNow,
+                    "system",
+                    "n/a",
+                    $"Statement '{statement.FileName}' uploaded."));
+            });
+        }
+        catch
+        {
+            try
+            {
+                await _fileStorage.DeleteAsync(storagePath);
+            }
+            catch
+            {
+            }
+
+            throw;
+        }
 
         return statement.ToDto();
     }

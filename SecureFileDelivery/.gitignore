@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+
+bin/
+obj/
+.vs/
+**/bin/
+**/obj/
+**/TestResults/
+**/logs/

@@ -9,5 +9,6 @@ public interface IDownloadTokenRepository
     Task<DownloadToken?> GetByIdAsync(TokenId id);
     Task AddAsync(DownloadToken token);
     Task UpdateAsync(DownloadToken token);
+    Task<bool> TryMarkAsUsedAsync(TokenId id, DateTime usedAt, CancellationToken cancellationToken = default);
     Task<int> DeleteExpiredAsync();
 }

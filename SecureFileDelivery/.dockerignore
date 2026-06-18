@@ -1,0 +1,13 @@
+.git
+.gitignore
+.vs
+**/bin/
+**/obj/
+**/TestResults/
+**/logs/
+**/*.user
+**/*.suo
+**/*.cache
+.env
+.env.*
+README.md

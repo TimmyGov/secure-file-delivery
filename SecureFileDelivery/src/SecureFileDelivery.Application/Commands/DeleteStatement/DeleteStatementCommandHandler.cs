@@ -9,11 +9,13 @@ public sealed class DeleteStatementCommandHandler : IRequestHandler<DeleteStatem
 {
     private readonly IStatementRepository _statementRepository;
     private readonly IFileStorage _fileStorage;
+    private readonly IUnitOfWork _unitOfWork;
 
-    public DeleteStatementCommandHandler(IStatementRepository statementRepository, IFileStorage fileStorage)
+    public DeleteStatementCommandHandler(IStatementRepository statementRepository, IFileStorage fileStorage, IUnitOfWork unitOfWork)
     {
         _statementRepository = statementRepository;
         _fileStorage = fileStorage;
+        _unitOfWork = unitOfWork;
     }
 
     public async Task<bool> Handle(DeleteStatementCommand request, CancellationToken cancellationToken)
@@ -25,8 +27,12 @@ public sealed class DeleteStatementCommandHandler : IRequestHandler<DeleteStatem
         }
 
         statement.MarkAsDeleted();
+        await _unitOfWork.ExecuteInTransactionAsync(async _ =>
+        {
+            await _statementRepository.UpdateAsync(statement);
+        });
+
         await _fileStorage.DeleteAsync(statement.StoragePath);
-        await _statementRepository.UpdateAsync(statement);
         return true;
     }
 }

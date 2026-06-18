@@ -34,13 +34,14 @@ public sealed class StorageHealthCheck : IHealthCheck
             var settings = _minioOptions.Value;
             var exists = await client.BucketExistsAsync(new BucketExistsArgs().WithBucket(settings.BucketName), cancellationToken);
             return exists
-                ? HealthCheckResult.Healthy("MinIO bucket is reachable.")
-                : HealthCheckResult.Unhealthy("MinIO bucket does not exist.");
+                ? HealthCheckResult.Healthy($"MinIO bucket '{settings.BucketName}' is reachable at '{settings.Endpoint}'.")
+                : HealthCheckResult.Unhealthy($"MinIO bucket '{settings.BucketName}' is missing at '{settings.Endpoint}'.");
         }
 
-        Directory.CreateDirectory(_localOptions.Value.BasePath);
+        var localBasePath = _localOptions.Value.BasePath;
+        Directory.CreateDirectory(localBasePath);
         return Directory.Exists(_localOptions.Value.BasePath)
-            ? HealthCheckResult.Healthy("Local storage is available.")
-            : HealthCheckResult.Unhealthy("Local storage is unavailable.");
+            ? HealthCheckResult.Healthy($"Local storage is available at '{localBasePath}'.")
+            : HealthCheckResult.Unhealthy($"Local storage is unavailable at '{localBasePath}'.");
     }
 }

@@ -1,8 +1,8 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 COPY . .
-RUN dotnet restore SecureFileDelivery/SecureFileDelivery.sln
-RUN dotnet publish SecureFileDelivery/src/SecureFileDelivery.API/SecureFileDelivery.API.csproj -c Release -o /app/publish
+RUN dotnet restore SecureFileDelivery.sln
+RUN dotnet publish src/SecureFileDelivery.API/SecureFileDelivery.API.csproj -c Release -o /app/publish
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app

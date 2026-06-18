@@ -33,6 +33,15 @@ public sealed class DownloadTokenRepository : IDownloadTokenRepository
         await _dbContext.SaveChangesAsync();
     }
 
+    public async Task<bool> TryMarkAsUsedAsync(TokenId id, DateTime usedAt, CancellationToken cancellationToken = default)
+    {
+        var rowsAffected = await _dbContext.DownloadTokens
+            .Where(x => x.Id == id.Value && !x.IsRevoked && x.UsedAt == null && x.ExpiresAt >= usedAt)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.UsedAt, usedAt), cancellationToken);
+
+        return rowsAffected > 0;
+    }
+
     public async Task<int> DeleteExpiredAsync()
     {
         var expiredTokens = await _dbContext.DownloadTokens.Where(x => x.ExpiresAt < DateTime.UtcNow).ToListAsync();

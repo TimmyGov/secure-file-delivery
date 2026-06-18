@@ -29,7 +29,7 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 ["Storage:Local:BasePath"] = "integration-statements",
                 ["Jwt:Issuer"] = "SecureFileDelivery",
                 ["Jwt:Audience"] = "SecureFileDelivery",
-                ["Jwt:SecretKey"] = "change-me-in-production-min-32-chars!!",
+                ["Jwt:SecretKey"] = "development-only-secret-change-me-32!!",
                 ["TokenCleanup:IntervalMinutes"] = "1440"
             };
             configBuilder.AddInMemoryCollection(overrides);

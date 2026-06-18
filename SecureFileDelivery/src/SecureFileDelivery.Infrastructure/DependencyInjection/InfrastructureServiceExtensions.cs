@@ -39,6 +39,7 @@ public static class InfrastructureServiceExtensions
         services.AddScoped<IStatementRepository, StatementRepository>();
         services.AddScoped<IDownloadTokenRepository, DownloadTokenRepository>();
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+        services.AddScoped<IUnitOfWork, EfCoreUnitOfWork>();
 
         services.AddSingleton<IMinioClient>(sp =>
         {
@@ -62,6 +63,7 @@ public static class InfrastructureServiceExtensions
         services.AddSingleton<ITokenHasher, Sha256TokenHasher>();
         services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
         services.AddHostedService<TokenCleanupService>();
+        services.AddHostedService<MinioBucketBootstrapService>();
 
         return services;
     }
